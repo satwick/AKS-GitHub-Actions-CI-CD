@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: <name of the app>-{{ .Values.Namespace }}
+  namespace: {{ .Values.Namespace }}
+spec:
+  replicas: {{ .Values.Replicas }}
+  selector:
+    matchLabels:
+      app: <<name of the app>>
+  template:
+    metadata:
+      labels:
+        app: <<name of the app>>
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: name
+                operator: In
+                values:
+                - <<name of the app>>-{{ .Values.Namespace }} 
+            topologyKey: "kubernetes.io/hostname"      
+      securityContext:
+        runAsUser: 999 
+      containers:
+        - name: <<name of the app>>
+          imagePullPolicy: Always
+          securityContext:
+            runAsUser: 999
+            runAsNonRoot: true
+          ports:
+            - containerPort: 8080
+          {{ if eq .Values.Namespace "prod" }}
+          image: <<name of the image>>-prod
+          {{ else }}
+          image: <<name of the image>>-{{ .Values.Namespace }}
+          {{ end }}
+          resources:
+            requests:
+              memory : {{ .Values.resources.requests.memory }}
+              cpu : {{ .Values.resources.requests.cpu }}
+            limits:
+              memory : {{ .Values.resources.limits.memory }}
+              cpu : {{ .Values.resources.limits.cpu }}
+#          env:
+#          - name: FLUENTD_ELASTIC_SEARCH_HOST
+#            valueFrom:
+#              secretKeyRef:
+#                name: fluent-cred
+#                key: ef_search_host
+#          - name: FLUENTD_ELASTIC_AUTH_USER
+#            valueFrom:
+#              secretKeyRef:
+#                name: fluent-cred
+#                key: ef_auth_user
+#          - name: FLUENTD_ELASTIC_AUTH_PASSWORD
+#            valueFrom:
+ #             secretKeyRef:
+  #              name: fluent-cred
+   #             key: ef_auth_pass 
+      imagePullSecrets:
+        - name: acrcred
