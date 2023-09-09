@@ -1,0 +1,15 @@
+Namespace: dev
+Replicas: 2
+resources:
+  limits:
+    cpu: 200m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 512Mi
+pdb:
+  enabled: false
+  available:
+    min: 1
+resreserv:
+  enabled: false
