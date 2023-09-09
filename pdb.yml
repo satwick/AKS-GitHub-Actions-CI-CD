@@ -1,0 +1,12 @@
+{{- if .Values.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: evobus-i4q-bonding-app-service-{{ .Values.Namespace }}
+  namespace: {{ .Values.Namespace }}
+spec:
+  minAvailable: {{ .Values.pdb.available.min }}
+  selector:
+    matchLabels:
+      app: evobus-i4q-bonding-app-service
+{{- end }}
