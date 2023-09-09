@@ -1,0 +1,107 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: evobus-i4q-bonding-app-service-{{ .Values.Namespace }}
+  namespace: {{ .Values.Namespace }} 
+spec:
+  replicas: {{ .Values.Replicas }}
+  selector:
+    matchLabels:
+      app: evobus-i4q-bonding-app-service
+  template:
+    metadata:
+      labels:
+        app: evobus-i4q-bonding-app-service
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: name
+                operator: In
+                values:
+                - evobus-i4q-bonding-app-service-{{ .Values.Namespace }}
+            topologyKey: "kubernetes.io/hostname"
+      securityContext:
+        runAsUser: 1000
+      containers:
+        - name: evobus-i4q-bonding-app-service
+          imagePullPolicy: Always
+          securityContext:
+            runAsUser: 1000
+            runAsNonRoot: true
+          ports:
+            - containerPort: 8080
+          {{ if eq .Values.Namespace "prod" }}
+          image: dflbusacr.azurecr.io/i4q-bonding-app-service:latest-int
+          {{ else }}
+          image: dflbusacr.azurecr.io/i4q-bonding-app-service:latest-{{ .Values.Namespace }}
+          {{- end }}
+          volumeMounts:
+          - name: ca-pemstore
+            mountPath: /etc/ssl/certs/Corp-Issuing-CA01-G2.pem
+            subPath: Corp-Issuing-CA01-G2.pem
+            readOnly: false
+          - name: ca-pemstore2
+            mountPath: /etc/ssl/certs/aevopppjscs_bus_corpintra_net.pem
+            subPath: aevopppjscs_bus_corpintra_net.pem
+            readOnly: false
+          - name: ca-pemstore3
+            mountPath: /etc/ssl/certs/Corp-Root-CA-G2.pem
+            subPath: Corp-Root-CA-G2.pem
+            readOnly: false
+          resources:  
+          {{- if .Values.resreserv.enabled }}
+            requests:
+              memory : {{ .Values.resources.requests.memory }}
+              cpu : {{ .Values.resources.requests.cpu }}
+            limits:
+              memory : {{ .Values.resources.limits.memory }}
+              cpu : {{ .Values.resources.limits.cpu }}
+          {{- end }}
+          env:
+          - name: ACTIVE_PROFILE
+            valueFrom:
+               configMapKeyRef:
+                 name: spring-{{ .Values.Namespace }}-profile
+                 key: active.profile
+          - name: POSTGRES_SERVICE
+            valueFrom:
+               configMapKeyRef:
+                 name: postgres-i4q-config
+                 #name: postgres-iq4db-config
+                 key: postgres.service.name
+          - name: POSTGRES_USER
+            valueFrom:
+              secretKeyRef:
+                name: postgres-cred-{{ .Values.Namespace }}-i4qbonding
+                key: i4q_postgres_user
+                              
+          - name: POSTGRES_PASSWD
+            valueFrom:
+              secretKeyRef:
+                name: postgres-cred-{{ .Values.Namespace }}-i4qbonding
+                key: i4qbonding_postgres_password
+          
+      volumes:
+        - name: ca-pemstore
+          configMap:
+            name: ca-pemstore
+        - name: ca-pemstore2
+          configMap:
+            name: ca-pemstore2
+        - name: ca-pemstore3
+          configMap:
+            name: ca-pemstore3
+      hostAliases:
+       - ip: 53.18.254.162
+         hostnames:
+         - edcs3dflintb.s3-edc.emea.svc.corpintra.net 
+       - ip: 53.151.100.102
+         hostnames:
+         - mailhost.cn.bg.corpintra.net 
+      #hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet        
+      imagePullSecrets:
+        - name: acrcred
