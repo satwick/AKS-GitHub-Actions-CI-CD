@@ -1,17 +1,17 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: <name of the app>-{{ .Values.Namespace }}
+  name: infox-be-{{ .Values.Target }}
   namespace: {{ .Values.Namespace }}
 spec:
   replicas: {{ .Values.Replicas }}
   selector:
     matchLabels:
-      app: <<name of the app>>
+      app: infox-be-{{ .Values.Target }}
   template:
     metadata:
-      labels:
-        app: <<name of the app>>
+      labels: 
+        app: infox-be-{{ .Values.Target }}
     spec:
       affinity:
         podAntiAffinity:
@@ -21,45 +21,95 @@ spec:
               - key: name
                 operator: In
                 values:
-                - <<name of the app>>-{{ .Values.Namespace }} 
+                - infox-be-{{ .Values.Target }}
             topologyKey: "kubernetes.io/hostname"      
       securityContext:
         runAsUser: 999 
       containers:
-        - name: <<name of the app>>
+        - name: infox-be-{{ .Values.Target }}
           imagePullPolicy: Always
           securityContext:
             runAsUser: 999
             runAsNonRoot: true
           ports:
-            - containerPort: 8080
-          {{ if eq .Values.Namespace "prod" }}
-          image: <<name of the image>>-prod
+            - containerPort: 8000
+          {{ if eq .Values.Environment "prod" }}
+          image: dflbusacr.azurecr.io/infox-be:latest-prod
           {{ else }}
-          image: <<name of the image>>-{{ .Values.Namespace }}
+          image: dflbusacr.azurecr.io/infox-be:latest-{{ .Values.Environment }}
           {{ end }}
+          livenessProbe:
+           httpGet:
+            path: /api/WeatherForecast # health check endpoint
+            port: 8000
+           periodSeconds: 30
+           timeoutSeconds: 5
+           failureThreshold: 3
+          readinessProbe:
+           httpGet:
+            path: /api/WeatherForecast # readiness endpoint
+            port: 8000
+           periodSeconds: 10
+           timeoutSeconds: 2
+           failureThreshold: 3
+          volumeMounts:
+#           - name: ca-pemstore
+#             mountPath: /etc/ssl/certs/Corp-Issuing-CA01-G2.pem
+#             subPath: Corp-Issuing-CA01-G2.pem
+#             readOnly: false
+#           - name: ca-pemstore2
+#             mountPath: /etc/ssl/certs/aevopppjscs_bus_corpintra_net.pem
+#             subPath: aevopppjscs_bus_corpintra_net.pem
+#             readOnly: false
+#           - name: ca-pemstore3
+#             mountPath: /etc/ssl/certs/Corp-Root-CA-G2.pem
+#             subPath: Corp-Root-CA-G2.pem
+#             readOnly: false
+          - name: tz-utc
+            mountPath: /etc/localtime
           resources:
+          {{- if .Values.resreserv.enabled }}
             requests:
               memory : {{ .Values.resources.requests.memory }}
               cpu : {{ .Values.resources.requests.cpu }}
             limits:
               memory : {{ .Values.resources.limits.memory }}
               cpu : {{ .Values.resources.limits.cpu }}
-#          env:
-#          - name: FLUENTD_ELASTIC_SEARCH_HOST
-#            valueFrom:
-#              secretKeyRef:
-#                name: fluent-cred
-#                key: ef_search_host
-#          - name: FLUENTD_ELASTIC_AUTH_USER
-#            valueFrom:
-#              secretKeyRef:
-#                name: fluent-cred
-#                key: ef_auth_user
-#          - name: FLUENTD_ELASTIC_AUTH_PASSWORD
-#            valueFrom:
- #             secretKeyRef:
-  #              name: fluent-cred
-   #             key: ef_auth_pass 
+          {{- end }}          
+        
+          env:
+          - name: INFOX_LOCALE
+            valueFrom:
+               configMapKeyRef:
+                 name: infox-locale-{{ .Values.Target }}
+                 key: infox_locale
+          - name: INFOX_ENV
+            valueFrom:
+               configMapKeyRef:
+                 name: infox-env-{{ .Values.Environment }}
+                 key: infox_env    
+
+      volumes:
+#         - name: ca-pemstore
+#           configMap:
+#             name: ca-pemstore
+#         - name: ca-pemstore2
+#           configMap:
+#             name: ca-pemstore2
+#         - name: ca-pemstore3
+#           configMap:
+#             name: ca-pemstore3
+        - name: tz-utc
+          hostPath:
+            path: /usr/share/zoneinfo/UTC
+      hostAliases:
+       - ip: 53.18.254.162
+         hostnames:
+         - edcs3dflintb.s3-edc.emea.svc.corpintra.net 
+       - ip: 53.151.100.102
+         hostnames:
+         - mailhost.cn.bg.corpintra.net 
+      #hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet        
       imagePullSecrets:
         - name: acrcred
