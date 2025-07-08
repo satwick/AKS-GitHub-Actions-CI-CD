@@ -1,3 +1,25 @@
+# AKS GitHub Actions CI/CD
+
+This repository contains Kubernetes manifest templates and a GitHub Actions workflow for deploying to Azure Kubernetes Service (AKS).
+
+## Manifest files
+- `deployment.yml` – Helm template for the main Deployment.
+- `certsdeployment.yml` – Deployment variant that mounts certificate ConfigMaps.
+- `service.yml` – ClusterIP service exposing the application.
+- `ingress.yml` – Azure Application Gateway ingress configuration.
+- `pdb.yml` – Optional PodDisruptionBudget for availability.
+- `values.yml` – Default Helm values for namespace, replicas and resources.
+
+## GitHub Actions workflow
+The workflow defined in `.github/workflows/aks-cicd.yml` builds a Docker image, runs tests and deploys the manifests to AKS.
+
+### Setup
+1. Create an Azure service principal and add the JSON output as the `AZURE_CREDENTIALS` secret.
+2. Provide `ACR_USERNAME`, `ACR_PASSWORD` and `ACR_NAME` so the workflow can push images to Azure Container Registry.
+3. Set `AKS_CLUSTER`, `AKS_RESOURCE_GROUP` and `AKS_NAMESPACE` to point to your AKS environment.
+
+Push changes to the `main` branch to trigger the pipeline and deploy to AKS.
+
 
 
 # KUBERNETES
