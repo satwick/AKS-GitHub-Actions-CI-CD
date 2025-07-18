@@ -1,7 +1,7 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: ingress-iq4bus-masterconfig-api
+  name: ingress-<app-name>-api
   namespace: {{ .Values.Namespace }}
   annotations:
     kubernetes.io/ingress.class: azure/application-gateway
@@ -9,16 +9,16 @@ metadata:
     appgw.ingress.kubernetes.io/request-timeout: "600"
     appgw.ingress.kubernetes.io/health-probe-path: "/actuator/health"
     appgw.ingress.kubernetes.io/use-private-ip: "true"
-    appgw.ingress.kubernetes.io/appgw-ssl-certificate: dflbuscert
+    appgw.ingress.kubernetes.io/appgw-ssl-certificate: <cert-name>
     appgw.ingress.kubernetes.io/ssl-redirect: "true"
 spec:
   rules:
   - http:
       paths:
-      - path:  /iq4masterconfig
+      - path:  /<path-name><app>
         pathType: Prefix
         backend:
           service:
-            name: iq4bus-masterconfig-api-service
+            name: <app-name>-service
             port:
               number: 80
