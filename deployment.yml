@@ -1,17 +1,17 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: infox-be-{{ .Values.Target }}
+  name: <app-name>-{{ .Values.Target }}
   namespace: {{ .Values.Namespace }}
 spec:
   replicas: {{ .Values.Replicas }}
   selector:
     matchLabels:
-      app: infox-be-{{ .Values.Target }}
+      app: <app-name>-{{ .Values.Target }}
   template:
     metadata:
       labels: 
-        app: infox-be-{{ .Values.Target }}
+        app: <app-name>-{{ .Values.Target }}
     spec:
       affinity:
         podAntiAffinity:
@@ -21,12 +21,12 @@ spec:
               - key: name
                 operator: In
                 values:
-                - infox-be-{{ .Values.Target }}
+                - <app-name>-{{ .Values.Target }}
             topologyKey: "kubernetes.io/hostname"      
       securityContext:
         runAsUser: 999 
       containers:
-        - name: infox-be-{{ .Values.Target }}
+        - name: <app-name>-{{ .Values.Target }}
           imagePullPolicy: Always
           securityContext:
             runAsUser: 999
@@ -34,9 +34,9 @@ spec:
           ports:
             - containerPort: 8000
           {{ if eq .Values.Environment "prod" }}
-          image: dflbusacr.azurecr.io/infox-be:latest-prod
+          image: <acr-repo-name>/<app-name>:latest-prod
           {{ else }}
-          image: dflbusacr.azurecr.io/infox-be:latest-{{ .Values.Environment }}
+          image: <acr-repo-name>/<app-name>:latest-{{ .Values.Environment }}
           {{ end }}
           livenessProbe:
            httpGet:
@@ -103,10 +103,10 @@ spec:
           hostPath:
             path: /usr/share/zoneinfo/UTC
       hostAliases:
-       - ip: 53.18.254.162
+       - ip: 
          hostnames:
          - edcs3dflintb.s3-edc.emea.svc.corpintra.net 
-       - ip: 53.151.100.102
+       - ip: 
          hostnames:
          - mailhost.cn.bg.corpintra.net 
       #hostNetwork: true
