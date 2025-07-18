@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: evobus-i4q-bonding-app-service
+  name: <app-name>-service
   namespace: {{ .Values.Namespace }} 
 spec:
   ports:
@@ -9,4 +9,4 @@ spec:
     protocol: TCP
     targetPort: 8080
   selector:
-    app: evobus-i4q-bonding-app-service
+    app: <app-name>-service
