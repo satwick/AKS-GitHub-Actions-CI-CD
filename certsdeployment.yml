@@ -1,17 +1,17 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: evobus-i4q-bonding-app-service-{{ .Values.Namespace }}
+  name: <app-name>-{{ .Values.Namespace }}
   namespace: {{ .Values.Namespace }} 
 spec:
   replicas: {{ .Values.Replicas }}
   selector:
     matchLabels:
-      app: evobus-i4q-bonding-app-service
+      app: <app-name>-service
   template:
     metadata:
       labels:
-        app: evobus-i4q-bonding-app-service
+        app: <app-name>-service
     spec:
       affinity:
         podAntiAffinity:
@@ -21,12 +21,12 @@ spec:
               - key: name
                 operator: In
                 values:
-                - evobus-i4q-bonding-app-service-{{ .Values.Namespace }}
+                - <app-name>-service-{{ .Values.Namespace }}
             topologyKey: "kubernetes.io/hostname"
       securityContext:
         runAsUser: 1000
       containers:
-        - name: evobus-i4q-bonding-app-service
+        - name: <app-name>-service
           imagePullPolicy: Always
           securityContext:
             runAsUser: 1000
@@ -34,9 +34,9 @@ spec:
           ports:
             - containerPort: 8080
           {{ if eq .Values.Namespace "prod" }}
-          image: dflbusacr.azurecr.io/i4q-bonding-app-service:latest-int
+          image: <image-repo-name>/<image-name-service:latest-int
           {{ else }}
-          image: dflbusacr.azurecr.io/i4q-bonding-app-service:latest-{{ .Values.Namespace }}
+          image: <image-repo-name>/<image-name-service:latest-{{ .Values.Namespace }}
           {{- end }}
           volumeMounts:
           - name: ca-pemstore
