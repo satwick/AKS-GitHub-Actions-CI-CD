@@ -1,72 +1,197 @@
-name: Build and Deploy to AKS
-
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+    branches:
+      - dev
+      - int
+      - master
+  workflow_dispatch:
 
+# Environment variables available to all jobs and steps in this workflow
 env:
-  ACR_LOGIN_SERVER: ${{ secrets.ACR_NAME }}.azurecr.io
-  IMAGE_NAME: aks-sample-app
-  NAMESPACE: ${{ secrets.AKS_NAMESPACE }}
-
+  REGISTRY_NAME: acr
+  SECRET: deploy-secret
+  APP_NAME: -issue-management
+  NAMESPACE: trex
+#Beginning of JOBS
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  # Gateways_dev:
+  #   if: ${{ github.ref_name == 'dev' }}
+  #   runs-on: Azure-Unite-03
+  #   steps:    
+  #   #Sonar-Scanner
+  #   - uses: actions/checkout@v3
+  #     with:
+  #       fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+  #   - name: Set up JDK 17
+  #     uses: actions/setup-java@v1
+  #     with:
+  #       java-version: 17
+  #   - name: Cache SonarQube packages
+  #     uses: actions/cache@v3
+  #     with:
+  #       path: ~/.sonar/cache
+  #       key: ${{ runner.os }}-sonar
+  #       restore-keys: ${{ runner.os }}-sonar
+  #   - name: Cache Maven packages
+  #     uses: actions/cache@v3
+  #     with:
+  #       path: ~/.m2
+  #       key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+  #       restore-keys: ${{ runner.os }}-m2
+  #   - name: Build and analyze
+  #     env:
+  #       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
+  #       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+  #       SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+  #     run: mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=IQBUSM -Dsonar.projectName='iq4bus-mastercofig-api'
+
+    # Detecting blackduck scan
+    # - name: Synopsys Detect
+    #   uses: blackducksoftware/github-action@2.1
+    #   with:
+    #     version: 7
+    #     args: --blackduck.url="https://bla.t3.daimlertruck.com/" --blackduck.api.token="ZGEzMTgwODItNGYzZC00MzkyLWJlNDEtZGIzM2RkMTQxNTRlOjkyMWE3YTE1LTU1NDctNGFmYi1iYWI3LWNlNjU0NTY4YzY0MQ==" --detect.project.name="iq4bus-mastercofig-api" --detect.project.version.name="v1.0" --detect.url="https://detect.synopsys.com/detect7.sh"
+
+  build_push_image:
+    runs-on: Azure-Unite-03
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+    - name: Check for push to master
+      run: |
+        if [[ $GITHUB_REF_NAME == 'master' ]]; then
+           echo "ENVIRONMENT=prod" >> "$GITHUB_ENV";
+           echo "CLUSTER_NAME=dflbus-aks-cluster-prod" >> "$GITHUB_ENV";
+           echo "CLUSTER_RESOURCE_GROUP=dflbus-prod-rg" >> "$GITHUB_ENV";
+        fi;
+    - name: Check for push to int
+      run: |
+        if [[ $GITHUB_REF_NAME == 'int' ]]; then
+           echo "ENVIRONMENT=int" >> "$GITHUB_ENV";
+           echo "CLUSTER_NAME=dflbus-aks-cluster-int" >> "$GITHUB_ENV";
+           echo "CLUSTER_RESOURCE_GROUP=dflbus-int-rg" >> "$GITHUB_ENV";
+        fi;
+    - name: Check for push to dev
+      run: |
+        if [[ $GITHUB_REF_NAME == 'dev' ]]; then
+           echo "ENVIRONMENT=dev" >> "$GITHUB_ENV";
+           echo "CLUSTER_NAME=dflbus-aks-cluster-dev" >> "$GITHUB_ENV";
+           echo "CLUSTER_RESOURCE_GROUP=dflbus-dev-rg" >> "$GITHUB_ENV";
+        fi;
+        
+    - name: TARGET BRANCH & ENV SET
+      run: |
+        echo "DEPLOYMENT TARGET SET TO:${{ env.ENVIRONMENT }}"
+        echo "DEPLOYMENT TARGET SET TO:${{ env.CLUSTER_NAME }}"
+        echo "DEPLOYMENT TARGET SET TO:${{ env.CLUSTER_RESOURCE_GROUP }}"
+        
+    - uses: actions/checkout@v3
+    - uses: actions/setup-java@v1
+      with:
+        java-version: 21
+    - run: mvn -B package --file pom.xml
+    
+    # Connect to Azure Container Registry (ACR)
+    - uses: azure/docker-login@v1
+      with:
+        login-server: ${{ env.REGISTRY_NAME }}.azurecr.io
+        username: ${{ secrets.IQ4BUS_UNITE_REGISTRY_USERNAME }}
+        password: ${{ secrets.IQ4BUS_UNITE_REGISTRY_PASSWORD }}
 
-      - name: Azure login
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+    # setup docker buildx
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+    # Container build and push to a Azure Container Registry (ACR)
+    - run: |
+        #docker build -t ${{ env.APP_NAME }} .
+        #docker tag ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.APP_NAME }}:${{ github.sha }} ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.APP_NAME }}:latest-${{ env.NAMESPACE }}
+        #docker push ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.APP_NAME }}:${{ github.sha }}
+        #docker push ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.APP_NAME }}:latest-:${{ env.ENVIRONMENT }}
+        #docker rmi ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.APP_NAME }}:${{ github.sha }}docker rmi ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.APP_NAME }}:latest-:${{ env.ENVIRONMENT }}
+        #docker build . -t ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.APP_NAME }}:${{ github.sha }} -t ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.APP_NAME }}:latest-${{ env.ENVIRONMENT }}
+        #docker push ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.APP_NAME }}:${{ github.sha }}
+        #docker push ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.APP_NAME }}:latest-${{ env.ENVIRONMENT }}
+        #docker rmi ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.APP_NAME }}:${{ github.sha }}
+        #docker rmi ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.APP_NAME }}:latest-${{ env.ENVIRONMENT }}
+        docker buildx build --push --platform linux/amd64,linux/arm64 . -t ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.APP_NAME }}:${{ github.sha }} -t ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.APP_NAME }}:latest-${{ env.ENVIRONMENT }}
+      working-directory: ./
 
-      - name: Log in to Azure Container Registry
-        uses: azure/docker-login@v1
-        with:
-          login-server: ${{ env.ACR_LOGIN_SERVER }}
-          username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
-
-      - name: Build and push image
-        run: |
-          docker build -t $ACR_LOGIN_SERVER/$IMAGE_NAME:${{ github.sha }} .
-          docker push $ACR_LOGIN_SERVER/$IMAGE_NAME:${{ github.sha }}
-
-      - name: Run tests
-        run: |
-          echo "Run your unit tests here"
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+  Deploy_to_TEST_AKS:
+    if: ${{ github.ref_name != 'master' }}
+    runs-on: Azure-Unite-03
+    needs: build_push_image
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+    - name: Check if AKS Context is INT
+      run: |
+        if [[ $GITHUB_REF_NAME == 'int' ]]; then
+           echo "ENVIRONMENT=int" >> "$GITHUB_ENV";
+           echo "CLUSTER_NAME=dflbus-aks-cluster-int" >> "$GITHUB_ENV";
+           echo "CLUSTER_RESOURCE_GROUP=dflbus-int-rg" >> "$GITHUB_ENV";
+        fi;
+    - name: Check if AKS Context is DEV
+      run: |
+        if [[ $GITHUB_REF_NAME == 'dev' ]]; then
+           echo "ENVIRONMENT=dev" >> "$GITHUB_ENV";
+           echo "CLUSTER_NAME=dflbus-aks-cluster-dev" >> "$GITHUB_ENV";
+           echo "CLUSTER_RESOURCE_GROUP=dflbus-dev-rg" >> "$GITHUB_ENV";
+        fi;
+    - name: PRINT TARGET CLUSTER DETAILS
+      run: |
+        echo "DEPLOYMENT TARGET ENVIRONMENT SET TO:${{ env.ENVIRONMENT }}"
+        echo "DEPLOYMENT TARGET CLUSTER SET TO:${{ env.CLUSTER_NAME }}"
+        echo "DEPLOYMENT TARGET RESOURCE GROUP SET TO:${{ env.CLUSTER_RESOURCE_GROUP }}"
+      
+    - uses: actions/checkout@v3
+    - name: Connect to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_UNITE_CREDENTIALS_TEST }}
+    - name: Connect to TEST AKS
+      uses: azure/aks-set-context@v3
+      with:
+        # Resource group name
+        resource-group: ${{ env.CLUSTER_RESOURCE_GROUP }}
+        # AKS cluster name
+        cluster-name: ${{ env.CLUSTER_NAME }}
+        use-kubelogin: 'true'
 
-      - name: Azure login
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - name: Set AKS context
-        uses: azure/aks-set-context@v3
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-          cluster-name: ${{ secrets.AKS_CLUSTER }}
-          resource-group: ${{ secrets.AKS_RESOURCE_GROUP }}
-
-      - name: Deploy manifests
-        run: |
-          kubectl apply -f deployment.yml \
-                        -f certsdeployment.yml \
-                        -f service.yml \
-                        -f ingress.yml \
-                        -f pdb.yml
-          kubectl rollout status deployment/infox-be-${{ env.NAMESPACE }} --namespace $NAMESPACE
+    - name: Run Helm Deploy
+      run: |
+        kubectl -n ${{ env.NAMESPACE }} get deployment
+        helm template kubernetes/helm/charts -f kubernetes/helm/values/${{ env.ENVIRONMENT }}/values.yaml | kubectl apply -f -
+        kubectl rollout restart  deploy ${{ env.APP_NAME }}-${{ env.ENVIRONMENT }} -n ${{ env.NAMESPACE }}      
+  
+  Deploy_to_PROD_AKS:
+    if: ${{ github.ref_name == 'master' }}
+    runs-on: Azure-Unite-03
+    needs: build_push_image
+    steps:
+    - name: Set PROD AKS Context
+      run: |
+        if [[ $GITHUB_REF_NAME == 'master' ]]; then
+           echo "ENVIRONMENT=prod" >> "$GITHUB_ENV";
+           echo "CLUSTER_NAME=dflbus-aks-cluster-prod" >> "$GITHUB_ENV";
+           echo "CLUSTER_RESOURCE_GROUP=dflbus-prod-rg" >> "$GITHUB_ENV";
+        fi;
+    - name: PRINT TARGET CLUSTER DETAILS 
+      run: |
+        echo "DEPLOYMENT TARGET ENVIRONMENT SET TO:${{ env.ENVIRONMENT }}"
+        echo "DEPLOYMENT TARGET CLUSTER SET TO:${{ env.CLUSTER_NAME }}"
+        echo "DEPLOYMENT TARGET RESOURCE GROUP SET TO:${{ env.CLUSTER_RESOURCE_GROUP }}"
+    - uses: actions/checkout@v3
+    - name: Connect to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_UNITE_CREDENTIALS_PROD }}
+    - name: Connect to PROD AKS
+      uses: azure/aks-set-context@v3
+      with:
+        # Resource group name
+        resource-group: ${{ env.CLUSTER_RESOURCE_GROUP }}
+        # AKS cluster name
+        cluster-name: ${{ env.CLUSTER_NAME }}
+        use-kubelogin: 'true'
+    - name: Run Helm Deploy
+      run: |
+        kubectl -n ${{ env.NAMESPACE }} get deployment
+        helm template kubernetes/helm/charts -f kubernetes/helm/values/${{ env.ENVIRONMENT }}/values.yaml | kubectl apply -f -
+        kubectl rollout restart  deploy ${{ env.APP_NAME }}-${{ env.ENVIRONMENT }} -n ${{ env.NAMESPACE }}
