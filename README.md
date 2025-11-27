@@ -1,192 +1,303 @@
-# AKS GitHub Actions CI/CD
+# AKS GitHub Actions CI/CD Pipeline
 
-This repository contains Kubernetes manifest templates and a GitHub Actions workflow for deploying to Azure Kubernetes Service (AKS).
+> **A production-ready Kubernetes deployment pipeline showcasing DevOps best practices with Azure Kubernetes Service (AKS) and GitHub Actions**
 
-## Manifest files
-- `deployment.yml` – Helm template for the main Deployment.
-- `certsdeployment.yml` – Deployment variant that mounts certificate ConfigMaps.
-- `service.yml` – ClusterIP service exposing the application.
-- `ingress.yml` – Azure Application Gateway ingress configuration.
-- `pdb.yml` – Optional PodDisruptionBudget for availability.
-- `values.yml` – Default Helm values for namespace, replicas and resources.
+[![CI/CD Pipeline](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF?logo=github-actions&logoColor=white)](https://github.com/features/actions)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-AKS-326CE5?logo=kubernetes&logoColor=white)](https://azure.microsoft.com/en-us/services/kubernetes-service/)
+[![Docker](https://img.shields.io/badge/Docker-ACR-2496ED?logo=docker&logoColor=white)](https://azure.microsoft.com/en-us/services/container-registry/)
 
-## GitHub Actions workflow
-The workflow defined in `.github/workflows/aks-cicd.yml` builds a Docker image, runs tests and deploys the manifests to AKS.
+## 📋 Overview
 
-### Setup
-1. Create an Azure service principal and add the JSON output as the `AZURE_CREDENTIALS` secret.
-2. Provide `ACR_USERNAME`, `ACR_PASSWORD` and `ACR_NAME` so the workflow can push images to Azure Container Registry.
-3. Set `AKS_CLUSTER`, `AKS_RESOURCE_GROUP` and `AKS_NAMESPACE` to point to your AKS environment.
+This repository demonstrates a complete CI/CD pipeline for deploying containerized applications to Azure Kubernetes Service (AKS) using GitHub Actions. It showcases modern DevOps practices including infrastructure as code, automated testing, security scanning, and multi-environment deployments.
 
-Push changes to the `main` branch to trigger the pipeline and deploy to AKS.
+### Key Features
 
+✅ **Automated CI/CD** - GitHub Actions workflow with build, test, and deploy stages  
+✅ **Multi-Environment** - Separate configurations for dev, staging, and production  
+✅ **Security First** - Container vulnerability scanning with Trivy  
+✅ **Infrastructure as Code** - Kubernetes manifests managed with Kustomize  
+✅ **High Availability** - Pod anti-affinity, PodDisruptionBudget, and health checks  
+✅ **Production Ready** - Resource limits, security contexts, and monitoring hooks  
 
+## 🏗️ Architecture
 
-# KUBERNETES
-Kubernetes (K8s) is an open-source system for automating deployment, scaling, and management of containerized applications.
+![Architecture Diagram](docs/images/architecture.png)
 
-# HELM
-Helm helps you manage Kubernetes applications — 
+The pipeline follows a GitOps approach where infrastructure and application code are version-controlled together. Each push triggers an automated workflow that builds, scans, and deploys to the appropriate environment.
 
-It renders our apps templates and communicates with the Kubernetes API
-It runs on our Jenkins slave
+**[📖 Detailed Architecture Documentation](docs/architecture.md)**
 
-Charts are Helm packages that contain at least two things:
-   1) A description of the package (Chart.yaml) (kubernetes/helm/Charts)
-   2) One or more templates, which contain Kubernetes manifest files (kubernetes/helm/charts/templates)
-   
-With Helm, configuration settings are kept separate from the manifest formats. You can edit the configuration values without changing the rest of the manifest. Configuration settings are in a values.yaml file (Kubernetes/helm/values/{ENV}/). You update the runtime parameters in that file to deploy each application instance differently.
+## 🚀 Quick Start
 
-In simple terms, helm is a package manager for kubernetes. Helm is kubernetes version of yum or apt. Helm deploys something called charts, which you can think of as a packaged application. 
+### Prerequisites
 
-# HELM CHARTS
-It is a collection of all your versioned, pre configured application resources which can be deployed as one unit. You can then deploy another version of the chart with a different set of configuration.
+- Azure subscription with AKS cluster
+- Azure Container Registry (ACR)
+- GitHub repository with Actions enabled
+- `kubectl` and `kustomize` installed locally (for testing)
 
-The directory /kubernetes/helm/charts/templates, contains  multiple  manfiest files:
+### 1. Clone the Repository
 
-## 1. Deployment File: 
-
-A Deployment provides declarative updates for Pods and ReplicaSets.
-
-You describe a desired state in a Deployment, and the Deployment Controller changes the actual state to the desired state at a controlled rate. You can define Deployments to create new ReplicaSets, or to remove existing Deployments and adopt all their resources with new Deployments.
-
-### POD affinity/anti-affinity
-Pod affinity and pod anti-affinity allow you to specify rules about how pods should be placed relative to other pods. The rules are defined using custom labels on nodes and label selectors specified in pods. Pod affinity/anti-affinity allows a pod to specify an affinity (or anti-affinity) towards a group of pods it can be placed with. The node does not have control over the placement.
-```ruby
-    spec:
-      affinity:
-        podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchExpressions:
-              - key: name
-                operator: In
-                values:
+```bash
+git clone https://github.com/yourusername/AKS-GitHub-Actions-CI-CD.git
+cd AKS-GitHub-Actions-CI-CD
 ```
 
+### 2. Configure Azure Resources
 
-### Security Context
-A security context defines the operating system security settings (uid, gid, capabilities, SELinux role, etc..) applied to a container. Here we  are running container  with  a  specific UID (not with  root  access)
-```ruby
-    spec:
-      securityContext:
-        runAsUser: 1000
+Create an Azure service principal for GitHub Actions:
+
+```bash
+az ad sp create-for-rbac \
+  --name "github-actions-aks" \
+  --role contributor \
+  --scopes /subscriptions/{subscription-id}/resourceGroups/{resource-group} \
+  --sdk-auth
 ```
 
+### 3. Set GitHub Secrets
 
-### SideCar 
-In the  deployment file we have configured  two  containers, sideCar and business app. The  purpose of  side car  is to ship  the  application  logs from  business app  to  elastic search. The sideCar  deploys with image : reg-dhc.app.corpintra.net/vpp/vpp-lipf-java-seed:latest , it has  installed  binary of fluentBit i.e. td-agent-bit. Currently SideCar  contaier will  deploy only in  case of  INT env. To enable it for DEV and PROD, add the respective IF condition of ENV.
-The  configuration of  fluentbit is set in td-agent-bit.conf file. Its manifest  file is kept here, /kubernetes/helm/charts/templates/lipf-fulent-bit-conf.yaml.
-```ruby
-      containers:
-        {{ if eq .Values.Namespace "int" }}
-        - name: sidecar-log-collector
-          image: reg-dhc.app.corpintra.net/vpp/vpp-lipf-java-seed:latest
-          volumeMounts:
-          ....  
-          - mountPath: /etc/td-agent-bit/td-agent-bit.conf
-            name: config-fluent-bit
-            subPath: td-agent-bit.conf
- ```
+Configure the following secrets in your GitHub repository settings:
 
+| Secret Name | Description |
+|------------|-------------|
+| `AZURE_CREDENTIALS` | Azure service principal credentials (JSON output from above) |
+| `ACR_USERNAME` | Azure Container Registry username |
+| `ACR_PASSWORD` | Azure Container Registry password |
 
-### Business Logic
-The  business app is where the  actual logic of  the application executes. The PROD ENV deploys the app with INT image. Whereas DEV and INT ENV builds its own image.
-```ruby
-      containers:
-          {{ if eq .Values.Namespace "prod" }}
-          image: reg-dhc.app.corpintra.net/vpp/lipf-*****:latest-int
-          {{ else }}
-          image: reg-dhc.app.corpintra.net/vpp/lipf-******:latest-{{ .Values.Namespace }}
-          {{- end }}
+### 4. Update Configuration
+
+Edit `.github/workflows/aks-cicd.yml` and update:
+- `ACR_NAME`: Your Azure Container Registry name
+- Cluster names and resource groups for each environment
+
+Edit `k8s/overlays/*/kustomization.yaml` files to match your environment names and configurations.
+
+### 5. Deploy
+
+Push to the appropriate branch to trigger deployment:
+
+```bash
+git checkout -b develop
+git push origin develop  # Deploys to dev environment
 ```
 
+## 📁 Repository Structure
 
-### ImagePull Secret
-A Kubernetes cluster uses the Secret of docker-registry type to authenticate with a container registry to pull a private image. We have  Quay and  Harbor as our continer  registry in CaaS. It recommended to  keep  the  images  private by creating robot account in Quay.
-```ruby
-      imagePullSecrets:
-        - name: vpp-lipf-pull-secret 
 ```
-### Limit and Request
-If the node where a Pod is running has enough of a resource available, it's possible (and allowed) for a container to use more resource than its request for that resource specifies. However, a container is not allowed to use more than its resource limit. The resources here mentioned are  CPU and Memory. The values of  these  resources are defined in  /kubernetes/helm/values/{ENV}/values.yaml. 
-```ruby
-          resources:
-            requests:
-              memory : {{ .Values.resources.requests.memory }}
-              cpu : {{ .Values.resources.requests.cpu }}
-            limits:
-              memory : {{ .Values.resources.limits.memory }}
-              cpu : {{ .Values.resources.limits.cpu }}
+.
+├── .github/
+│   └── workflows/
+│       ├── aks-cicd.yml          # Main CI/CD workflow
+│       └── README.md             # Workflow documentation
+├── k8s/
+│   ├── base/                     # Base Kubernetes manifests
+│   │   ├── deployment.yaml
+│   │   ├── service.yaml
+│   │   ├── ingress.yaml
+│   │   ├── pdb.yaml
+│   │   └── kustomization.yaml
+│   └── overlays/                 # Environment-specific overlays
+│       ├── dev/
+│       ├── staging/
+│       └── prod/
+├── app/                          # Sample Node.js application
+│   ├── src/
+│   │   └── index.js
+│   └── package.json
+├── docs/                         # Documentation
+│   ├── architecture.md
+│   └── images/
+├── Dockerfile                    # Multi-stage Docker build
+└── README.md
 ```
-## 2. Ingress File: 
-This file contains an API object that manages external access to the services in a k8s cluster, typically HTTP. We have  deployed Traefik as an Ingress controller in our CaaS  tenant.
 
-Using the Ingress resource and the associated Ingress Controller we have achieved the following:
- - Domain : Point our domain lipf- {ENV}.app.corpintra.net to the microservice app in our CaaS private network and load balance between multiple instances (Pods) of that microservice..
- - Path : Point the path /<Path-name> to the microservice (which  needs to  be exposed from outside) in our CaaS private network.   
- - Backend: Backend includes the microservice (name of the  service) and the  port where it is listining.  
-```ruby
-   rules:
-  {{ if eq .Values.Namespace "prod" }}
-  - host: lipf.app.corpintra.net
-  {{ else }}
-  - host: lipf-{{ .Values.Namespace }}.app.corpintra.net
-  {{ end }}
-    http:
-      paths:
-      - backend:
-          serviceName: <microservice service name>
-          servicePort: <port>
-        path: /<path>/
-   ```
+## 🔄 CI/CD Pipeline
 
-## 3. NetworkPolicy File: 
-A network policy is a specification of how groups of pods are allowed to communicate with each other and other network endpoints. In our  CaaS  tenant the default network policy  is deny all, that  means, by defult pod to pod communication is denied. In many  cases pod need to  communicate  with  another pod (in same  namespace or different namespace), this communication can  be enabled by  writing  a  manifest file of type netwokPolicy.   
-```ruby
-spec:
-  podSelector:
-    matchLabels:
-      app: vans-forecast
-  ingress:
-    - ports:
-      - port: 8080
-        protocol: TCP
-    - from:
-      {{- if ne .Values.Namespace "dev" }}
-      - podSelector:
-          matchLabels:
-            app: i3-tex-caddy
-      {{ else }}
-      - namespaceSelector:
-          matchLabels:
-            name: ingress
-      {{- end }}
+### Workflow Stages
+
+1. **Build**
+   - Checkout source code
+   - Build Docker image with BuildKit
+   - Tag with environment and commit SHA
+   - Push to Azure Container Registry
+   - Run Trivy security scan
+
+2. **Deploy**
+   - Authenticate with Azure
+   - Set AKS cluster context
+   - Apply Kustomize manifests
+   - Verify deployment rollout
+   - Display deployment status
+
+### Environment Strategy
+
+| Branch | Environment | Replicas | Resources |
+|--------|------------|----------|-----------|
+| `develop` | Development | 2 | 256Mi / 100m CPU |
+| `staging` | Staging | 3 | 512Mi / 250m CPU |
+| `main` | Production | 5 | 1Gi / 500m CPU |
+
+**[📖 Workflow Documentation](.github/workflows/README.md)**
+
+## 🔒 Security Features
+
+- **Container Scanning**: Trivy scans for vulnerabilities before deployment
+- **Non-Root Containers**: All containers run as non-root users
+- **Security Contexts**: Dropped capabilities and read-only filesystems
+- **Network Policies**: Namespace isolation (can be added)
+- **RBAC**: Role-based access control for AKS resources
+- **Secrets Management**: Kubernetes secrets for sensitive data
+
+## 🛠️ Technology Stack
+
+- **Container Orchestration**: Azure Kubernetes Service (AKS)
+- **Container Registry**: Azure Container Registry (ACR)
+- **CI/CD**: GitHub Actions
+- **IaC Tool**: Kustomize
+- **Security Scanning**: Trivy
+- **Ingress Controller**: Azure Application Gateway
+- **Application**: Node.js Express API
+
+## 📊 Kubernetes Resources
+
+### Deployment
+- Rolling update strategy
+- Pod anti-affinity for distribution across nodes
+- Liveness and readiness probes
+- Resource requests and limits
+- Security contexts
+
+### Service
+- ClusterIP type for internal communication
+- Label selectors matching deployment
+- Port mapping (80 → 8080)
+
+### Ingress
+- Azure Application Gateway integration
+- SSL/TLS termination
+- Health probe configuration
+- Path-based routing
+
+### PodDisruptionBudget
+- Ensures minimum pod availability
+- Protects against simultaneous terminations
+- Critical for production stability
+
+## 🧪 Testing Locally
+
+### Build and run the application locally:
+
+```bash
+cd app
+npm install
+npm start
 ```
-taking the  above example, vans-forecast microservice applies an ingress traffic to the  selected  pods (If no policyTypes are specified on a NetworkPolicy then by default Ingress will always be set). Based on  the ENV (dev or int/prod), NetworkPolicy applies  which  pod  can communicate with vans-forecast micro-service.
-In case, when  ENV is dev, van-forecast only allows incoming traffic from ingress controller pods which are in different namespace (ingress). 
-In case of  int/prod, van-forecast only allows incoming traffic from  i3-tex-caddy pod on port 8080. I3-tex-caddy and  vans-forecast are in  same namespace. 
 
-## 4. Pod Disruption Budget File: 
-A pod disruption budget is an indicator of the number of disruptions that can be tolerated at a given time for a class of pods (a budget of faults). Whenever a disruption to the pods in a service is calculated to cause the service to drop below the budget, the operation is paused until it can maintain the budget. This means that the drain event could be temporarily halted while it waits for more pods to become available such that the budget isn’t crossed by evicting the pods.
+### Test with Docker:
 
-Pod Disruption Budget is currently  set for  INT and  PROD env. In INT and PROD env we have  replicaCount for  each  microservices > 1. To deloy PDB for any micro-service, make sure the  replicaCount  for that  mirco-service should always be > 1 otherwise at patching node /upgarding node/draining node time, the node may stuck.
+```bash
+docker build -t demo-api:local .
+docker run -p 8080:8080 demo-api:local
+```
 
-## 5. ConfigMap File:
-ConfigMaps allow us to decouple configuration artifacts from image content to keep containerized applications portable.
-In LIPF, we have configmap deployed for  postres and  fluent-bit. 
+### Validate Kubernetes manifests:
 
-#### Troubleshooting:
-#### 1) Pods are pending with event message failedScheduling
+```bash
+# Validate base manifests
+kubectl apply --dry-run=client -k k8s/base/
 
-If the scheduler cannot find any node where a Pod can fit, the Pod remains unscheduled until a place can be found. An event is produced each time the scheduler fails to find a place for the Pod.
-If a Pod is pending with a message of this type, there are several things to try:
+# Validate environment overlay
+kubectl apply --dry-run=client -k k8s/overlays/dev/
+```
 
-1.1) Add more nodes to the cluster.
+### Preview Kustomize output:
 
-1.2) Terminate unneeded Pods to make room for pending Pods.
+```bash
+kustomize build k8s/overlays/dev/
+```
 
-1.3) Check that the Pod is not larger than all the nodes. For example, if all the nodes have a capacity of cpu: 1, then a Pod with a request of cpu: 1.1 will never be scheduled.
+## 📈 Monitoring and Observability
 
-#### 2) Container is terminated
-Container might get terminated because it is resource-starved. To check whether a Container is being killed because it is hitting a resource limit, call kubectl describe pod on the Pod of interest or check  grafan dashboard of  Pod.  One  reason  of its  termination could be  reason: OOM Killed, where OOM stands for  Out Of Memory.  
+### Health Endpoints
+
+- **Liveness**: `GET /health/live` - Container is alive
+- **Readiness**: `GET /health/ready` - Container is ready for traffic
+
+### Recommended Monitoring Tools
+
+- **Azure Monitor**: Container insights and metrics
+- **Prometheus**: Metrics collection
+- **Grafana**: Metrics visualization
+- **Application Insights**: APM and distributed tracing
+
+## 🔧 Troubleshooting
+
+### Common Issues
+
+**Image Pull Errors**
+```bash
+# Verify ACR secret exists
+kubectl get secret acr-secret -n <namespace>
+
+# Recreate if needed
+kubectl create secret docker-registry acr-secret \
+  --docker-server=<acr-name>.azurecr.io \
+  --docker-username=<username> \
+  --docker-password=<password> \
+  --namespace=<namespace>
+```
+
+**Pod Not Starting**
+```bash
+# Check pod status
+kubectl get pods -n <namespace>
+
+# View pod logs
+kubectl logs <pod-name> -n <namespace>
+
+# Describe pod for events
+kubectl describe pod <pod-name> -n <namespace>
+```
+
+**Deployment Rollout Failed**
+```bash
+# Check rollout status
+kubectl rollout status deployment/<deployment-name> -n <namespace>
+
+# View deployment events
+kubectl describe deployment/<deployment-name> -n <namespace>
+
+# Rollback if needed
+kubectl rollout undo deployment/<deployment-name> -n <namespace>
+```
+
+## 🚀 Future Enhancements
+
+- [ ] Implement Horizontal Pod Autoscaler (HPA)
+- [ ] Add Cluster Autoscaler configuration
+- [ ] Integrate Azure Key Vault for secrets
+- [ ] Implement GitOps with ArgoCD or Flux
+- [ ] Add service mesh (Istio/Linkerd)
+- [ ] Implement canary deployments
+- [ ] Add comprehensive monitoring dashboards
+- [ ] Multi-region deployment strategy
+
+## 📚 Additional Resources
+
+- [Azure Kubernetes Service Documentation](https://docs.microsoft.com/en-us/azure/aks/)
+- [Kubernetes Best Practices](https://kubernetes.io/docs/concepts/configuration/overview/)
+- [GitHub Actions Documentation](https://docs.github.com/en/actions)
+- [Kustomize Documentation](https://kustomize.io/)
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🤝 Contributing
+
+This is a portfolio project, but suggestions and improvements are welcome! Feel free to open an issue or submit a pull request.
+
+---
+
+**Built with ❤️ to showcase DevOps and Kubernetes expertise**
