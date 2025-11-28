@@ -1,0 +1,26 @@
+# Production Environment Configuration
+environment: production
+kustomizeOverlay: k8s/overlays/prod
+
+# Deployment settings
+replicaCount: 5
+namespace: production
+
+# Image settings (will be overridden by Kustomize)
+image:
+  repository: <ACR_NAME>.azurecr.io/demo-api
+  tag: latest-prod
+  pullPolicy: Always
+
+# Resource limits (defined in Kustomize overlay)
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "500m"
+  limits:
+    memory: "1Gi"
+    cpu: "1000m"
+
+# Production-specific settings
+podDisruptionBudget:
+  minAvailable: 2

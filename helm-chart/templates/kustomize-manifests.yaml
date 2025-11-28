@@ -1,0 +1,7 @@
+{{- /*
+This template includes the Kustomize-generated manifests.
+The manifests are built during the CI/CD pipeline and passed to Helm.
+*/ -}}
+{{- if .Values.kustomizeManifests }}
+{{ .Values.kustomizeManifests }}
+{{- end }}

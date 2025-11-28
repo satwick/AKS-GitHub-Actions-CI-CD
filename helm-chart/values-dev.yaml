@@ -1,0 +1,22 @@
+# Development Environment Configuration
+environment: dev
+kustomizeOverlay: k8s/overlays/dev
+
+# Deployment settings
+replicaCount: 2
+namespace: dev
+
+# Image settings (will be overridden by Kustomize)
+image:
+  repository: <ACR_NAME>.azurecr.io/demo-api
+  tag: latest-dev
+  pullPolicy: Always
+
+# Resource limits (defined in Kustomize overlay)
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"

@@ -8,11 +8,13 @@
 
 ## 📋 Overview
 
-This repository demonstrates a complete CI/CD pipeline for deploying containerized applications to Azure Kubernetes Service (AKS) using GitHub Actions. It showcases modern DevOps practices including infrastructure as code, automated testing, security scanning, and multi-environment deployments.
+This repository demonstrates a complete CI/CD pipeline for deploying containerized applications to Azure Kubernetes Service (AKS) using GitHub Actions. It showcases modern DevOps practices including infrastructure as code, automated testing, security scanning, multi-environment deployments, and **one-command rollback capabilities**.
 
 ### Key Features
 
 ✅ **Automated CI/CD** - GitHub Actions workflow with build, test, and deploy stages  
+✅ **Hybrid Approach** - Kustomize for manifest generation + Helm for deployment  
+✅ **One-Command Rollback** - Full release history with instant rollback capability  
 ✅ **Multi-Environment** - Separate configurations for dev, staging, and production  
 ✅ **Security First** - Container vulnerability scanning with Trivy  
 ✅ **Infrastructure as Code** - Kubernetes manifests managed with Kustomize  
@@ -23,7 +25,11 @@ This repository demonstrates a complete CI/CD pipeline for deploying containeriz
 
 ![Architecture Diagram](docs/images/architecture.png)
 
-The pipeline follows a GitOps approach where infrastructure and application code are version-controlled together. Each push triggers an automated workflow that builds, scans, and deploys to the appropriate environment.
+The pipeline uses a **hybrid approach** combining Kustomize and Helm:
+- **Kustomize** generates environment-specific manifests from base configurations
+- **Helm** manages deployments with full release tracking and rollback capabilities
+
+Each push triggers an automated workflow that builds, scans, generates manifests, and deploys to the appropriate environment with automatic rollback on failure.
 
 **[📖 Detailed Architecture Documentation](docs/architecture.md)**
 
@@ -34,7 +40,7 @@ The pipeline follows a GitOps approach where infrastructure and application code
 - Azure subscription with AKS cluster
 - Azure Container Registry (ACR)
 - GitHub repository with Actions enabled
-- `kubectl` and `kustomize` installed locally (for testing)
+- `kubectl`, `kustomize`, and `helm` installed locally (for testing)
 
 ### 1. Clone the Repository
 
@@ -88,8 +94,16 @@ git push origin develop  # Deploys to dev environment
 .
 ├── .github/
 │   └── workflows/
-│       ├── aks-cicd.yml          # Main CI/CD workflow
+│       ├── aks-cicd.yml          # Main CI/CD workflow (Helm + Kustomize)
 │       └── README.md             # Workflow documentation
+├── helm-chart/                   # Helm chart for deployment
+│   ├── Chart.yaml                # Chart metadata
+│   ├── values-dev.yaml           # Dev environment values
+│   ├── values-staging.yaml       # Staging environment values
+│   ├── values-prod.yaml          # Production environment values
+│   ├── templates/
+│   │   └── kustomize-manifests.yaml  # Template wrapper
+│   └── .helmignore
 ├── k8s/
 │   ├── base/                     # Base Kubernetes manifests
 │   │   ├── deployment.yaml
@@ -107,6 +121,7 @@ git push origin develop  # Deploys to dev environment
 │   └── package.json
 ├── docs/                         # Documentation
 │   ├── architecture.md
+│   ├── HELM_GUIDE.md             # Helm usage and rollback guide
 │   └── images/
 ├── Dockerfile                    # Multi-stage Docker build
 └── README.md
@@ -126,9 +141,16 @@ git push origin develop  # Deploys to dev environment
 2. **Deploy**
    - Authenticate with Azure
    - Set AKS cluster context
-   - Apply Kustomize manifests
+   - Generate Kustomize manifests
+   - Deploy using Helm with atomic rollback
    - Verify deployment rollout
-   - Display deployment status
+   - Display deployment status and history
+
+3. **Rollback** (automatic on failure)
+   - Detect deployment failure
+   - Automatically rollback to previous revision
+   - Verify rollback success
+   - Display rollback status
 
 ### Environment Strategy
 
@@ -154,7 +176,8 @@ git push origin develop  # Deploys to dev environment
 - **Container Orchestration**: Azure Kubernetes Service (AKS)
 - **Container Registry**: Azure Container Registry (ACR)
 - **CI/CD**: GitHub Actions
-- **IaC Tool**: Kustomize
+- **Deployment Tool**: Helm 3
+- **Configuration Management**: Kustomize
 - **Security Scanning**: Trivy
 - **Ingress Controller**: Azure Application Gateway
 - **Application**: Node.js Express API
@@ -217,6 +240,21 @@ kubectl apply --dry-run=client -k k8s/overlays/dev/
 kustomize build k8s/overlays/dev/
 ```
 
+### Test Helm deployment:
+
+```bash
+# Lint Helm chart
+helm lint helm-chart/
+
+# Dry-run Helm install
+kustomize build k8s/overlays/dev/ > /tmp/dev-manifests.yaml
+helm install demo-api-dev helm-chart/ \
+  --namespace dev \
+  --values helm-chart/values-dev.yaml \
+  --set-file kustomizeManifests=/tmp/dev-manifests.yaml \
+  --dry-run --debug
+```
+
 ## 📈 Monitoring and Observability
 
 ### Health Endpoints
@@ -231,9 +269,49 @@ kustomize build k8s/overlays/dev/
 - **Grafana**: Metrics visualization
 - **Application Insights**: APM and distributed tracing
 
+## 🔄 Rollback Procedures
+
+### View Release History
+
+```bash
+# List all Helm releases
+helm list --namespace dev
+
+# View release history
+helm history demo-api-dev --namespace dev
+```
+
+### Rollback to Previous Version
+
+```bash
+# Rollback to previous revision
+helm rollback demo-api-dev --namespace dev
+
+# Rollback to specific revision
+helm rollback demo-api-dev 2 --namespace dev --wait
+
+# Verify rollback
+helm status demo-api-dev --namespace dev
+kubectl get pods -n dev
+```
+
+**[📖 Complete Helm Rollback Guide](docs/HELM_GUIDE.md)**
+
 ## 🔧 Troubleshooting
 
 ### Common Issues
+
+**Deployment Failed**
+```bash
+# Check Helm release status
+helm status demo-api-dev --namespace dev
+
+# View release history
+helm history demo-api-dev --namespace dev
+
+# Rollback to last working version
+helm rollback demo-api-dev --namespace dev
+```
 
 **Image Pull Errors**
 ```bash
@@ -258,18 +336,9 @@ kubectl logs <pod-name> -n <namespace>
 
 # Describe pod for events
 kubectl describe pod <pod-name> -n <namespace>
-```
 
-**Deployment Rollout Failed**
-```bash
-# Check rollout status
-kubectl rollout status deployment/<deployment-name> -n <namespace>
-
-# View deployment events
-kubectl describe deployment/<deployment-name> -n <namespace>
-
-# Rollback if needed
-kubectl rollout undo deployment/<deployment-name> -n <namespace>
+# Force rollback if needed
+helm rollback demo-api-dev --namespace dev --force
 ```
 
 ## 🚀 Future Enhancements

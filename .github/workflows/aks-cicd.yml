@@ -99,7 +99,7 @@ jobs:
       with:
         sarif_file: 'trivy-results.sarif'
 
-  # Deploy to AKS
+  # Deploy to AKS using Helm with Kustomize
   deploy:
     name: Deploy to AKS
     runs-on: ubuntu-latest
@@ -120,16 +120,19 @@ jobs:
             echo "AKS_CLUSTER=aks-prod-cluster" >> $GITHUB_ENV
             echo "AKS_RESOURCE_GROUP=rg-prod" >> $GITHUB_ENV
             echo "NAMESPACE=production" >> $GITHUB_ENV
+            echo "HELM_RELEASE=demo-api-prod" >> $GITHUB_ENV
             ;;
           staging)
             echo "AKS_CLUSTER=aks-staging-cluster" >> $GITHUB_ENV
             echo "AKS_RESOURCE_GROUP=rg-staging" >> $GITHUB_ENV
             echo "NAMESPACE=staging" >> $GITHUB_ENV
+            echo "HELM_RELEASE=demo-api-staging" >> $GITHUB_ENV
             ;;
           *)
             echo "AKS_CLUSTER=aks-dev-cluster" >> $GITHUB_ENV
             echo "AKS_RESOURCE_GROUP=rg-dev" >> $GITHUB_ENV
             echo "NAMESPACE=dev" >> $GITHUB_ENV
+            echo "HELM_RELEASE=demo-api-dev" >> $GITHUB_ENV
             ;;
         esac
     
@@ -144,6 +147,11 @@ jobs:
         resource-group: ${{ env.AKS_RESOURCE_GROUP }}
         cluster-name: ${{ env.AKS_CLUSTER }}
     
+    - name: Install Helm
+      uses: azure/setup-helm@v3
+      with:
+        version: 'latest'
+    
     - name: Create namespace if not exists
       run: |
         kubectl create namespace ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
@@ -157,17 +165,41 @@ jobs:
           --namespace=${{ env.NAMESPACE }} \
           --dry-run=client -o yaml | kubectl apply -f -
     
-    - name: Deploy to AKS using Kustomize
+    - name: Generate Kustomize manifests
       run: |
         # Update image in kustomization
         cd k8s/overlays/${{ env.ENVIRONMENT }}
         kustomize edit set image <ACR_NAME>.azurecr.io/${{ env.APP_NAME }}=${{ env.ACR_NAME }}.azurecr.io/${{ env.APP_NAME }}:latest-${{ env.ENVIRONMENT }}
         
-        # Apply manifests
-        kubectl apply -k . --namespace=${{ env.NAMESPACE }}
+        # Build and save manifests
+        kustomize build . > /tmp/kustomize-manifests.yaml
+        
+        echo "Generated manifests:"
+        cat /tmp/kustomize-manifests.yaml
+    
+    - name: Deploy to AKS using Helm
+      run: |
+        # Deploy with Helm, passing Kustomize manifests as a value
+        helm upgrade --install ${{ env.HELM_RELEASE }} ./helm-chart \
+          --namespace ${{ env.NAMESPACE }} \
+          --create-namespace \
+          --values ./helm-chart/values-${{ env.ENVIRONMENT }}.yaml \
+          --set-file kustomizeManifests=/tmp/kustomize-manifests.yaml \
+          --wait \
+          --timeout 5m \
+          --atomic \
+          --cleanup-on-fail
+        
+        echo "✅ Deployment successful!"
+        echo "Release: ${{ env.HELM_RELEASE }}"
+        echo "Namespace: ${{ env.NAMESPACE }}"
     
     - name: Verify deployment
       run: |
+        # Check Helm release status
+        helm status ${{ env.HELM_RELEASE }} --namespace ${{ env.NAMESPACE }}
+        
+        # Verify deployment rollout
         kubectl rollout status deployment/${{ env.ENVIRONMENT }}-demo-api \
           --namespace=${{ env.NAMESPACE }} \
           --timeout=5m
@@ -175,6 +207,9 @@ jobs:
     - name: Get deployment info
       if: always()
       run: |
+        echo "=== Helm Release Info ==="
+        helm list --namespace ${{ env.NAMESPACE }}
+        echo ""
         echo "=== Pods ==="
         kubectl get pods -n ${{ env.NAMESPACE }} -l app=demo-api
         echo ""
@@ -183,3 +218,88 @@ jobs:
         echo ""
         echo "=== Ingress ==="
         kubectl get ingress -n ${{ env.NAMESPACE }} -l app=demo-api
+        echo ""
+        echo "=== Helm History ==="
+        helm history ${{ env.HELM_RELEASE }} --namespace ${{ env.NAMESPACE }}
+
+  # Rollback job (can be triggered manually or on failure)
+  rollback:
+    name: Rollback Deployment
+    runs-on: ubuntu-latest
+    needs: [build, deploy]
+    if: failure() && github.event_name != 'pull_request'
+    environment: ${{ needs.build.outputs.environment }}
+    
+    steps:
+    - name: Set environment variables
+      run: |
+        ENV="${{ needs.build.outputs.environment }}"
+        echo "ENVIRONMENT=$ENV" >> $GITHUB_ENV
+        
+        case $ENV in
+          prod)
+            echo "AKS_CLUSTER=aks-prod-cluster" >> $GITHUB_ENV
+            echo "AKS_RESOURCE_GROUP=rg-prod" >> $GITHUB_ENV
+            echo "NAMESPACE=production" >> $GITHUB_ENV
+            echo "HELM_RELEASE=demo-api-prod" >> $GITHUB_ENV
+            ;;
+          staging)
+            echo "AKS_CLUSTER=aks-staging-cluster" >> $GITHUB_ENV
+            echo "AKS_RESOURCE_GROUP=rg-staging" >> $GITHUB_ENV
+            echo "NAMESPACE=staging" >> $GITHUB_ENV
+            echo "HELM_RELEASE=demo-api-staging" >> $GITHUB_ENV
+            ;;
+          *)
+            echo "AKS_CLUSTER=aks-dev-cluster" >> $GITHUB_ENV
+            echo "AKS_RESOURCE_GROUP=rg-dev" >> $GITHUB_ENV
+            echo "NAMESPACE=dev" >> $GITHUB_ENV
+            echo "HELM_RELEASE=demo-api-dev" >> $GITHUB_ENV
+            ;;
+        esac
+    
+    - name: Azure login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: Set AKS context
+      uses: azure/aks-set-context@v3
+      with:
+        resource-group: ${{ env.AKS_RESOURCE_GROUP }}
+        cluster-name: ${{ env.AKS_CLUSTER }}
+    
+    - name: Install Helm
+      uses: azure/setup-helm@v3
+      with:
+        version: 'latest'
+    
+    - name: Rollback to previous release
+      run: |
+        echo "⚠️ Deployment failed, rolling back..."
+        
+        # Get current revision
+        CURRENT_REVISION=$(helm history ${{ env.HELM_RELEASE }} --namespace ${{ env.NAMESPACE }} --max 1 -o json | jq -r '.[0].revision')
+        PREVIOUS_REVISION=$((CURRENT_REVISION - 1))
+        
+        if [ $PREVIOUS_REVISION -gt 0 ]; then
+          echo "Rolling back from revision $CURRENT_REVISION to $PREVIOUS_REVISION"
+          helm rollback ${{ env.HELM_RELEASE }} $PREVIOUS_REVISION --namespace ${{ env.NAMESPACE }} --wait
+          echo "✅ Rollback successful!"
+        else
+          echo "❌ No previous revision to rollback to"
+          exit 1
+        fi
+    
+    - name: Verify rollback
+      run: |
+        echo "=== Rollback Status ==="
+        helm status ${{ env.HELM_RELEASE }} --namespace ${{ env.NAMESPACE }}
+        
+        echo ""
+        echo "=== Deployment Status ==="
+        kubectl get deployment -n ${{ env.NAMESPACE }} -l app=demo-api
+        
+        echo ""
+        echo "=== Helm History ==="
+        helm history ${{ env.HELM_RELEASE }} --namespace ${{ env.NAMESPACE }}
+

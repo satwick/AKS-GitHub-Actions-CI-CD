@@ -1,0 +1,22 @@
+# Staging Environment Configuration
+environment: staging
+kustomizeOverlay: k8s/overlays/staging
+
+# Deployment settings
+replicaCount: 3
+namespace: staging
+
+# Image settings (will be overridden by Kustomize)
+image:
+  repository: <ACR_NAME>.azurecr.io/demo-api
+  tag: latest-staging
+  pullPolicy: Always
+
+# Resource limits (defined in Kustomize overlay)
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "250m"
+  limits:
+    memory: "1Gi"
+    cpu: "1000m"
