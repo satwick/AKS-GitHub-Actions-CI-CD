@@ -343,14 +343,11 @@ helm rollback demo-api-dev --namespace dev --force
 
 ## 🚀 Future Enhancements
 
-- [ ] Implement Horizontal Pod Autoscaler (HPA)
-- [ ] Add Cluster Autoscaler configuration
-- [ ] Integrate Azure Key Vault for secrets
-- [ ] Implement GitOps with ArgoCD or Flux
-- [ ] Add service mesh (Istio/Linkerd)
-- [ ] Implement canary deployments
-- [ ] Add comprehensive monitoring dashboards
-- [ ] Multi-region deployment strategy
+- **[🚀 Detailed Future Work & Roadmap](FUTURE_WORK.md)**
+  - Horizontal Pod Autoscaler (HPA)
+  - Network Policies & Security
+  - Advanced Configuration Management
+  - Service Mesh & GitOps strategies
 
 ## 📚 Additional Resources
 

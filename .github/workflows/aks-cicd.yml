@@ -21,8 +21,8 @@ on:
           - prod
 
 env:
-  ACR_NAME: <YOUR_ACR_NAME>
-  APP_NAME: demo-api
+  ACR_NAME: <ACR_NAME>
+  APP_NAME: <App-Name>
 
 jobs:
   # Build and push Docker image to Azure Container Registry
